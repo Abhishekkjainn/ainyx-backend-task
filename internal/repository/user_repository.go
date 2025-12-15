@@ -5,7 +5,7 @@ import (
 	"context"
 )
 
-// Repository Interface (Best Practice: Dependency Injection)
+
 type UserRepository interface {
 	CreateUser(ctx context.Context, arg sqlc.CreateUserParams) (sqlc.User, error)
 	GetUser(ctx context.Context, id int32) (sqlc.User, error)
@@ -14,7 +14,6 @@ type UserRepository interface {
 	DeleteUser(ctx context.Context, id int32) error
 }
 
-// SQLRepository implementation
 type SQLUserRepository struct {
 	*sqlc.Queries
 }

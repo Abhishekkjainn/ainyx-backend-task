@@ -34,29 +34,29 @@ func main() {
 	dbConn := config.ConnectDB()
 	defer dbConn.Close()
 
-	// Wiring Layers: DB -> Repo -> Service -> Handler
+	
 	queries := sqlc.New(dbConn)
-	userRepo := repository.NewUserRepository(queries)     // Added Repo Layer
-	userService := service.NewUserService(userRepo)       // Injected Repo
+	userRepo := repository.NewUserRepository(queries)     
+	userService := service.NewUserService(userRepo)       
 	userHandler := handler.NewUserHandler(userService)
 
 	app := fiber.New(fiber.Config{
 		AppName: "Ainyx User API",
-		// Add custom error handler if desired
+
 	})
 
-	// Middleware (Adopted from Kedar + Abhishek)
-	app.Use(recover.New())          // Safety: Catch panics
-	app.Use(cors.New())             // CORS support
-	app.Use(middleware.RequestLogger) // Abhishek's Logger
+	
+	app.Use(recover.New())          
+	app.Use(cors.New())             
+	app.Use(middleware.RequestLogger) 
 
 	routes.SetupRoutes(app, userHandler)
 
-	// Graceful Shutdown (Kedar's implementation)
+	
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	// Start server in goroutine
+	
 	go func() {
 		logger.Log.Info("Server starting on port 8080")
 		if err := app.Listen(":8080"); err != nil {
@@ -64,11 +64,11 @@ func main() {
 		}
 	}()
 
-	// Wait for interrupt
+	
 	<-ctx.Done()
 	logger.Log.Info("Shutting down server...")
 
-	// Cleanup
+
 	_, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := app.Shutdown(); err != nil {

@@ -10,7 +10,7 @@ import (
 )
 
 type UserHandler struct {
-	service   service.UserService // Changed from *service.UserService to interface
+	service   service.UserService 
 	validator *validator.Validate
 }
 

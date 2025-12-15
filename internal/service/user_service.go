@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// Service Interface (Decoupling)
+
 type UserService interface {
 	CreateUser(ctx context.Context, req models.CreateUserRequest) (models.UserResponse, error)
 	GetUser(ctx context.Context, id int32) (models.UserResponse, error)
