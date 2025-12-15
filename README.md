@@ -17,7 +17,7 @@ A RESTful API built with Go, Fiber, PostgreSQL, and SQLC.
 
 1. **Clone the repository**:
    ```bash
-   git clone <repository-url>
+   git clone (https://github.com/Abhishekkjainn/ainyx-backend-task)
    cd project
    ```
 
