@@ -3,22 +3,37 @@ package service
 import (
 	"ainyx-backend/db/sqlc"
 	"ainyx-backend/internal/models"
+	"ainyx-backend/internal/repository"
 	"context"
+	"errors"
 	"time"
 )
 
-type UserService struct {
-	queries *sqlc.Queries
+// Service Interface (Decoupling)
+type UserService interface {
+	CreateUser(ctx context.Context, req models.CreateUserRequest) (models.UserResponse, error)
+	GetUser(ctx context.Context, id int32) (models.UserResponse, error)
+	ListUsers(ctx context.Context, page, limit int32) ([]models.UserResponse, error)
+	UpdateUser(ctx context.Context, id int32, req models.UpdateUserRequest) (models.UserResponse, error)
+	DeleteUser(ctx context.Context, id int32) error
 }
 
-func NewUserService(db *sqlc.Queries) *UserService {
-	return &UserService{queries: db}
+type userService struct {
+	repo repository.UserRepository
 }
 
-func (s *UserService) CreateUser(ctx context.Context, req models.CreateUserRequest) (models.UserResponse, error) {
-	parsedDob, _ := time.Parse("2006-01-02", req.Dob)
+func NewUserService(repo repository.UserRepository) UserService {
+	return &userService{repo: repo}
+}
 
-	user, err := s.queries.CreateUser(ctx, sqlc.CreateUserParams{
+func (s *userService) CreateUser(ctx context.Context, req models.CreateUserRequest) (models.UserResponse, error) {
+	// FIX: Do not ignore the error!
+	parsedDob, err := time.Parse("2006-01-02", req.Dob)
+	if err != nil {
+		return models.UserResponse{}, errors.New("invalid date format, expected YYYY-MM-DD")
+	}
+
+	user, err := s.repo.CreateUser(ctx, sqlc.CreateUserParams{
 		Name: req.Name,
 		Dob:  parsedDob,
 	})
@@ -26,38 +41,24 @@ func (s *UserService) CreateUser(ctx context.Context, req models.CreateUserReque
 		return models.UserResponse{}, err
 	}
 
-	return models.UserResponse{
-		ID:   user.ID,
-		Name: user.Name,
-		Dob:  user.Dob.Format("2006-01-02"),
-		Age:  models.CalculateAge(user.Dob),
-	}, nil
+	return s.mapToResponse(user), nil
 }
 
-func (s *UserService) GetUser(ctx context.Context, id int32) (models.UserResponse, error) {
-	user, err := s.queries.GetUser(ctx, id)
+func (s *userService) GetUser(ctx context.Context, id int32) (models.UserResponse, error) {
+	user, err := s.repo.GetUser(ctx, id)
 	if err != nil {
 		return models.UserResponse{}, err
 	}
-
-	return models.UserResponse{
-		ID:   user.ID,
-		Name: user.Name,
-		Dob:  user.Dob.Format("2006-01-02"),
-		Age:  models.CalculateAge(user.Dob),
-	}, nil
+	return s.mapToResponse(user), nil
 }
 
-func (s *UserService) ListUsers(ctx context.Context, page, limit int32) ([]models.UserResponse, error) {
-	if page < 1 {
-		page = 1
-	}
-	if limit < 1 {
-		limit = 10
-	}
+func (s *userService) ListUsers(ctx context.Context, page, limit int32) ([]models.UserResponse, error) {
+	if page < 1 { page = 1 }
+	if limit < 1 { limit = 10 }
 	offset := (page - 1) * limit
 
-	users, err := s.queries.ListUsers(ctx, sqlc.ListUsersParams{
+	// Pagination (Bonus retained from Abhishek)
+	users, err := s.repo.ListUsers(ctx, sqlc.ListUsersParams{
 		Limit:  limit,
 		Offset: offset,
 	})
@@ -67,20 +68,18 @@ func (s *UserService) ListUsers(ctx context.Context, page, limit int32) ([]model
 
 	var response []models.UserResponse
 	for _, u := range users {
-		response = append(response, models.UserResponse{
-			ID:   u.ID,
-			Name: u.Name,
-			Dob:  u.Dob.Format("2006-01-02"),
-			Age:  models.CalculateAge(u.Dob),
-		})
+		response = append(response, s.mapToResponse(u))
 	}
 	return response, nil
 }
 
-func (s *UserService) UpdateUser(ctx context.Context, id int32, req models.UpdateUserRequest) (models.UserResponse, error) {
-	parsedDob, _ := time.Parse("2006-01-02", req.Dob)
+func (s *userService) UpdateUser(ctx context.Context, id int32, req models.UpdateUserRequest) (models.UserResponse, error) {
+	parsedDob, err := time.Parse("2006-01-02", req.Dob)
+	if err != nil {
+		return models.UserResponse{}, errors.New("invalid date format, expected YYYY-MM-DD")
+	}
 
-	user, err := s.queries.UpdateUser(ctx, sqlc.UpdateUserParams{
+	user, err := s.repo.UpdateUser(ctx, sqlc.UpdateUserParams{
 		ID:   id,
 		Name: req.Name,
 		Dob:  parsedDob,
@@ -89,14 +88,19 @@ func (s *UserService) UpdateUser(ctx context.Context, id int32, req models.Updat
 		return models.UserResponse{}, err
 	}
 
+	return s.mapToResponse(user), nil
+}
+
+func (s *userService) DeleteUser(ctx context.Context, id int32) error {
+	return s.repo.DeleteUser(ctx, id)
+}
+
+// Helper to avoid repetition
+func (s *userService) mapToResponse(user sqlc.User) models.UserResponse {
 	return models.UserResponse{
 		ID:   user.ID,
 		Name: user.Name,
 		Dob:  user.Dob.Format("2006-01-02"),
 		Age:  models.CalculateAge(user.Dob),
-	}, nil
-}
-
-func (s *UserService) DeleteUser(ctx context.Context, id int32) error {
-	return s.queries.DeleteUser(ctx, id)
+	}
 }

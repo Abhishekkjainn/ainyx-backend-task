@@ -1,34 +1,60 @@
-# Reasoning and Approach
+# Architectural Reasoning & Design Decisions
 
-## Overview
-This repository contains the solution for the Ainyx Solutions Go Backend Development Task. The goal was to build a RESTful API for user management with dynamic age calculation, robust validation, and structured logging.
+## 📖 Introduction
+This document outlines the thought process, architectural decisions, and technical trade-offs made during the development of the Ainyx Go Backend Task. The goal was not just to satisfy the requirements, but to build a foundation that is maintainable, scalable, and adheres to Go best practices.
 
-## Architectural Decisions
+## 🏗️ Architecture: Standard Go Layout
 
-### 1. Project Structure
-I adopted a standard Go project layout (`cmd`, `internal`, `pkg`) to separate concerns:
-- **`cmd/server`**: Entry point, keeping main logic minimal.
-- **`internal/`**: Private application code.
-    - **`handler`**: HTTP transport layer, handles request/response.
-    - **`service`**: Business logic (e.g., date parsing, age calculation).
-    - **`repository` (via SQLC)**: Type-safe database access.
-    - **`models`**: Data structures and validation rules.
+I adopted the **Standard Go Project Layout** (`cmd/`, `internal/`) to separate concerns effectively.
 
-### 2. Dependency Choices
-- **Fiber**: Chosen for its performance and Expressjs-like ease of use.
-- **SQLC**: Preferred over ORMs (like GORM) for performance and type-safety while writing raw SQL.
-- **Uber Zap**: Low-allocation, high-performance structured logging.
-- **go-playground/validator**: Industry standard for struct validation.
+*   **`cmd/server/main.go`**: This is the connection point. It strictly handles initialization (loading config, connecting to DB, wiring dependencies) and starting the server. It contains no business logic.
+*   **`internal/`**: This directory ensures that the application code cannot be imported by external projects, enforcing encapsulation.
+    *   **Layered Architecture**:
+        1.  **Handler/Controller**: Parses HTTP requests, validates input, and sends responses. It knows *nothing* about the database.
+        2.  **Service/Business Logic**: Contains the core domain logic (e.g., orchestrating creating a user). It sits between the handler and the data layer.
+        3.  **Repository/Data Layer (SQLC)**: Handles raw database interactions.
 
-### 3. Implementation Details
-- **Dynamic Age Calculation**: Implemented in the `models` package using `time.Now()` and specific date logic to account for years and days, ensuring accuracy.
-- **Middleware**: Added a request logger middleware that also injects a UUID `X-Request-ID` for traceability.
-- **Validation**: Struct tags are used to enforce `required` fields and date formats (`2006-01-02`).
+**Why this approach?**
+This separation allows for easier testing and refactoring. For example, if we switched from Postgres to MySQL, we would mostly touch the Repository layer. If we switched from REST to gRPC, we would mostly touch the Handler layer.
 
-## Key Trade-offs
-- **SQLC vs ORM**: SQLC requires a compiled step (`sqlc generate`), but guarantees that queries match the schema.
-- **Fiber vs Stdlib**: Fiber is not compatible with `net/http` interfaces out of the box, but offers better developer experience for routing and middleware.
+## 🛠️ Technology Stack Recommendations
 
-## Future Improvements
-- **Docker**: Containerization for consistent deployment.
-- **Pagination**: Adding offset/limit to the List endpoint.
+### 1. Web Framework: Fiber vs. Gin vs. Stdlib
+*   **Decision**: **Fiber**.
+*   **Reasoning**: Fiber was chosen for its extreme performance (based on Fasthttp) and its ergonomic, Express.js-like API. For a task requiring rapid development and clean middleware handling (like logging and CORS), Fiber allows for very concise code compared to the standard `net/http` library.
+
+### 2. Database Interaction: SQLC vs. GROM
+*   **Decision**: **SQLC**.
+*   **Reasoning**:
+    *   **Type Safety**: SQLC compiles raw SQL queries into type-safe Go code. If a query is invalid or column names change, the build fails *immediately*, not at runtime.
+    *   **Performance**: Unlike GORM, which relies heavily on reflection, SQLC generates pure struct-scanning code, making it significantly faster and lower overhead.
+    *   **Clarity**: Writing raw SQL (in `db/migrations`) is often clearer/more powerful than learning a specific ORM DSL.
+
+### 3. Logging: Uber Zap
+*   **Decision**: **Zap**.
+*   **Reasoning**: Standard `log` package is insufficient for structured logging. Zap provides structured, leveled logging with zero allocation overhead in critical paths. Combined with a `RequestID` middleware, this enables powerful traceability in production logs.
+
+## 🌟 Implementation Highlights
+
+### Dynamic Age Calculation
+Instead of storing "Age" (which becomes stale daily), I store `DOB`. The `CalculateAge` function in `pkg/models` uses `time.Now()` to compute the age on-the-fly.
+*   **Logic**: It compares years, then checks if the current day/month is before the birthday to subtract one if necessary.
+*   **Testing**: This critical logic is backed by Unit Tests covering edge cases (birthday today, birthday tomorrow, leap years).
+
+### Pagination (Bonus)
+I implemented offset-based pagination (`Limit` and `Offset`) in the `ListUsers` endpoint.
+*   The SQL query was updated to accept `$1` (limit) and `$2` (offset).
+*   The Service layer calculates `offset = (page - 1) * limit`.
+*   This prevents the API from crashing when the dataset grows to thousands of users.
+
+### Docker Support (Bonus)
+A Multi-Stage Dockerfile was used to minimize image size.
+1.  **Builder Stage**: Compiles the Go binary.
+2.  **Final Stage**: Uses `alpine` (approx 5MB) and copies *only* the binary and .env file.
+This results in a tiny, secure production image.
+
+## ⚖️ Trade-offs & Future Improvements
+
+1.  **Configuration**: Currently using `godotenv`. In a larger system, I would use simpler tooling like `kelseyhightower/envconfig` or `viper` for hierarchical config (file vs env vs flags).
+2.  **Migrations**: Schema is defined in `schema.sql`. For a real production app, I would add a migration tool like `golang-migrate` to manage versioned database changes up/down.
+3.  **Testing**: Added unit tests for logic. Integration tests spinning up a test container DB would be the next step for 100% reliability.

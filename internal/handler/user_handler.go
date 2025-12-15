@@ -10,11 +10,11 @@ import (
 )
 
 type UserHandler struct {
-	service   *service.UserService
+	service   service.UserService // Changed from *service.UserService to interface
 	validator *validator.Validate
 }
 
-func NewUserHandler(s *service.UserService) *UserHandler {
+func NewUserHandler(s service.UserService) *UserHandler {
 	return &UserHandler{
 		service:   s,
 		validator: validator.New(),
