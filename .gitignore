@@ -1,0 +1,11 @@
+# Binaries
+*.exe
+*.dll
+*.so
+
+# Environment Variables
+.env
+
+# Go build artifacts
+vendor/
+go.sum
